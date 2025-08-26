@@ -13,6 +13,22 @@ return new class extends Migration
     {
         Schema::create('members', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
+            
+            $table->unsignedBigInteger('plan_id')->nullable();
+            $table->foreign('plan_id')->references('id')->on('plans')->nullOnDelete();
+
+            $table->string('name');
+            $table->date('dob');
+            $table->string('phone');
+            $table->string('blood_group')->nullable();
+            $table->decimal('weight', 5, 2)->nullable();
+            $table->decimal('height', 5, 2)->nullable();
+            $table->date('joining_date');
+            $table->string('photo')->nullable();
+            $table->string('fingerprint_id')->nullable();
+            $table->boolean('is_staff')->default(false);
+            $table->date('plan_expiry')->nullable();
             $table->timestamps();
         });
     }

@@ -13,6 +13,10 @@ return new class extends Migration
     {
         Schema::create('plans', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
+            $table->string('name'); // "Monthly", "Quarterly", etc.
+            $table->integer('duration_months'); // e.g. 1, 2, 6, 12
+            $table->decimal('price', 8, 2);
             $table->timestamps();
         });
     }

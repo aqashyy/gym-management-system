@@ -13,6 +13,12 @@ return new class extends Migration
     {
         Schema::create('customers', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('contact_no');
+            $table->text('address')->nullable();
+            $table->date('expiry_date');
+            $table->boolean('status')->default(1);
             $table->timestamps();
         });
     }
