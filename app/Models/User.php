@@ -26,6 +26,7 @@ class User extends Authenticatable implements FilamentUser
     protected $fillable = [
         'name',
         'email',
+        'role',
         'password',
     ];
 
@@ -50,5 +51,10 @@ class User extends Authenticatable implements FilamentUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function Customer()
+    {
+        return $this->hasOne(Customer::class, 'user_id');
     }
 }

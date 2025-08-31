@@ -11,10 +11,12 @@ use App\Filament\Customer\Resources\Members\Schemas\MemberInfolist;
 use App\Filament\Customer\Resources\Members\Tables\MembersTable;
 use App\Models\Member;
 use BackedEnum;
+use Filament\Facades\Filament;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class MemberResource extends Resource
 {
@@ -22,6 +24,12 @@ class MemberResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    public static function getEloquentQuery(): Builder
+    {
+        $user = Filament::auth()->user();
+        // dd($user->Customer->id);
+        return parent::getEloquentQuery()->where('customer_id',$user->Customer->id);
+    }
     public static function form(Schema $schema): Schema
     {
         return MemberForm::configure($schema);
@@ -48,9 +56,9 @@ class MemberResource extends Resource
     {
         return [
             'index' => ListMembers::route('/'),
-            'create' => CreateMember::route('/create'),
-            'view' => ViewMember::route('/{record}'),
-            'edit' => EditMember::route('/{record}/edit'),
+            // 'create' => CreateMember::route('/create'),
+            // 'view' => ViewMember::route('/{record}'),
+            // 'edit' => EditMember::route('/{record}/edit'),
         ];
     }
 }
