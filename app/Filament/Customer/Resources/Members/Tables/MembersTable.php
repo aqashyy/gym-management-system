@@ -2,10 +2,12 @@
 
 namespace App\Filament\Customer\Resources\Members\Tables;
 
+use App\Services\MemberService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -16,12 +18,13 @@ class MembersTable
     {
         return $table
             ->columns([
-                TextColumn::make('customer_id')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('plan_id')
-                    ->numeric()
-                    ->sortable(),
+                TextColumn::make('fingerprint_id')
+                    ->label('Finger ID')
+                    ->icon(Heroicon::OutlinedFingerPrint)
+                    ->badge()
+                    ->color('primary')
+                    ->searchable(),
+
                 TextColumn::make('name')
                     ->searchable(),
                 TextColumn::make('dob')
@@ -29,31 +32,47 @@ class MembersTable
                     ->sortable(),
                 TextColumn::make('phone')
                     ->searchable(),
-                TextColumn::make('blood_group')
-                    ->searchable(),
-                TextColumn::make('weight')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('height')
-                    ->numeric()
-                    ->sortable(),
                 TextColumn::make('joining_date')
                     ->date()
                     ->sortable(),
-                TextColumn::make('photo')
-                    ->searchable(),
-                TextColumn::make('fingerprint_id')
-                    ->searchable(),
+
                 IconColumn::make('is_staff')
                     ->boolean(),
+
                 TextColumn::make('plan_expiry')
                     ->date()
                     ->sortable(),
+
+                TextColumn::make('plan_status')
+                    ->default('Not have plan')
+                    ->formatStateUsing(function ($record) {
+                        // return $record->id;
+                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                            return 'Expired';
+                        }
+                        return 'Active';
+                    })
+                    ->icon(function ($record) {
+                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                            return Heroicon::XCircle;
+                        }
+                        return Heroicon::CheckCircle;
+                    })
+                    ->iconColor(function ($record) {
+                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                            return 'danger';
+                        }
+                        return 'success';
+                    })
+                    ->badge()
+                    ->color(function ($record) {
+                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                            return 'danger';
+                        }
+                        return 'success';
+                    }),
+
                 TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -62,8 +81,8 @@ class MembersTable
                 //
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
+                ViewAction::make()->label(''),
+                EditAction::make()->label(''),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

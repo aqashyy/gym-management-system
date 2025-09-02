@@ -39,4 +39,14 @@ class MemberService
         
         return $planExpiry;
     }
+
+    public function isPlanExpired(int $member_id): bool
+    {
+        $member = Member::find($member_id);
+        if($member->plan_expiry < now())
+        {
+            return true;
+        }
+        return false;
+    }
 }

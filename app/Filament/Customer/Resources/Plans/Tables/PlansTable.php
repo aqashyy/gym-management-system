@@ -20,7 +20,7 @@ class PlansTable
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('price')
-                    ->money()
+                    ->money('INR')
                     ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()

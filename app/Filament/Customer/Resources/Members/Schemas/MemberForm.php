@@ -6,6 +6,7 @@ use App\Services\MemberService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -21,59 +22,119 @@ class MemberForm
         return $schema
             ->components([
                 TextInput::make('name')
-                    ->required(),
+                    ->placeholder('Enter name here')
+                    ->required()
+                    ->extraInputAttributes([
+                        'oninput' => <<<JS
+                            // Remove double spaces
+                            this.value = this.value.replace(/\\s{2,}/g, ' ');
+                            // Capitalize first letter of each word
+                            this.value = this.value.replace(/\\b\\w/g, c => c.toUpperCase());
+
+                            // Trim leading spaces
+                            this.value = this.value.replace(/^\\s+/, '');
+                        JS,
+                    ]),
+
                 DatePicker::make('dob')
                     ->required(),
+
                 TextInput::make('phone')
+                    ->label('Whatsapp Number')
+                    ->placeholder('Enter whatsapp number here')
+                    ->prefix('91')
                     ->tel()
                     ->required(),
+
                 TextInput::make('blood_group')
-                    ->default(null),
+                    ->default(null)
+                    ->extraInputAttributes([
+                        'style' => 'text-transform: uppercase;',
+                        'onkeydown' => <<<JS
+                            const allowed = /[A-Za-z+-]/;
+                            if (
+                                !allowed.test(event.key) && 
+                                event.key !== 'Backspace' && 
+                                event.key !== 'Delete' && 
+                                event.key !== 'ArrowLeft' && 
+                                event.key !== 'ArrowRight' && 
+                                event.key !== 'Tab'
+                            ) {
+                                event.preventDefault();
+                            }
+                        JS,
+                    ])
+                    ->datalist(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
+                    ->placeholder('e.g. A+')
+                    ->dehydrateStateUsing(fn ($state) => strtoupper($state)),
+
                 TextInput::make('weight')
+                    ->placeholder('Enter weight in Kg')
+                    ->postfix('KG')
                     ->numeric()
                     ->default(null),
+
                 TextInput::make('height')
+                    ->placeholder('Enter height in CM')
+                    ->postfix('CM')
                     ->numeric()
                     ->default(null),
+
+                TextInput::make('fingerprint_id')
+                    ->placeholder('Enter member fingerprint ID')
+                    ->label('Fingerprint ID (From biometric device)')
+                    ->required(),
+
+                Toggle::make('is_staff')
+                    ->label('Is Staff .?')
+                    ->live(true)
+                    ->required(),
+
                 DatePicker::make('joining_date')
                     ->default(now())
                     ->required()
-                    ->live(onBlur:true),
+                    ->live(onBlur:true)
+                    ->afterStateUpdated(function (Set $set,Get $get, ?string $state) {
+                        if($get('plan_id')) {
+                            $monthsDuration = Filament::auth()->user()->Customer->Plans()->find($get('plan_id'))->duration_months;
+                            $planExpiry = app(MemberService::class)->calculatePlanExpiry($state,$monthsDuration);
+
+                            $set('plan_expiry', $planExpiry);
+                        }
+                    }),
 
                 Select::make('plan_id')
                     ->label('Plans')
+                    ->placeholder('Select plan')
                     ->relationship('Customer.Plans','name')
                     ->searchable()
                     ->preload()
                     ->live(onBlur:true)
                     ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
-                        // dd($state);
+
                         if($state != null) {
                             $monthsDuration = Filament::auth()->user()->Customer->Plans()->find($state)->duration_months;
-                            // $addedDays = 30 * $monthsDuration - 1; //calculating 
-                            // set added days to expiry date
-                            // dd($get('joining_date'));
-                            // $plan_expiry = Carbon::parse($get('joining_date'))->addDays($addedDays);
-                            // dd($plan_expiry->format('Y-m-d'));
                             $planExpiry = app(MemberService::class)->calculatePlanExpiry($get('joining_date'),$monthsDuration);
 
                             $set('plan_expiry', $planExpiry);
-                            // dd($addedDays);
                         }
-                        // $oneMonth = Carbon::parse($state)->addDays(29);
-                        // dd($oneMonth->format('Y-m-d'));
-                        // $set('plan_expiry', $oneMonth->format('Y-m-d'));
-                    }),
+                    })
+                    ->required()
+                    ->hidden(fn (Get $get): bool => $get('is_staff')),
 
-                TextInput::make('photo')
-                    ->default(null),
-                TextInput::make('fingerprint_id')
-                    ->required(),
+                DatePicker::make('plan_expiry')
+                    ->label('Plan Expiry (Auto detect as per selected plan & joining date)')
+                    ->disabled()
+                    ->required(fn (Get $get): bool => $get('is_staff') == true ? false : true)
+                    ->hidden(fn (Get $get): bool => $get('is_staff')),
 
-                Toggle::make('is_staff')
-                    ->required(),
+                FileUpload::make('photo')
+                    ->imageEditor()
+                    ->imageCropAspectRatio('1:1')
+                    ->imageResizeTargetWidth('450')
+                    ->imageResizeTargetHeight('450')
+                    ->image(),
 
-                DatePicker::make('plan_expiry'),
             ]);
     }
 }

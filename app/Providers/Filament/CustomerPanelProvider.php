@@ -27,6 +27,7 @@ class CustomerPanelProvider extends PanelProvider
             ->id('customer')
             ->path('customer')
             ->brandName('Gym Management System')
+            ->spa()
             ->colors([
                 'primary' => Color::Amber,
             ])

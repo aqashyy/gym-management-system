@@ -13,14 +13,14 @@ class PlanForm
             ->components([
                 TextInput::make('name')
                 ->required(),
-                
+
                 TextInput::make('duration_months')
                     ->required()
                     ->numeric(),
                 TextInput::make('price')
                     ->required()
                     ->numeric()
-                    ->prefix('$'),
+                    ->prefix('₹'),
             ]);
     }
 }
