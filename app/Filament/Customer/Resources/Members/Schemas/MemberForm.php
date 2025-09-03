@@ -53,11 +53,11 @@ class MemberForm
                         'onkeydown' => <<<JS
                             const allowed = /[A-Za-z+-]/;
                             if (
-                                !allowed.test(event.key) && 
-                                event.key !== 'Backspace' && 
-                                event.key !== 'Delete' && 
-                                event.key !== 'ArrowLeft' && 
-                                event.key !== 'ArrowRight' && 
+                                !allowed.test(event.key) &&
+                                event.key !== 'Backspace' &&
+                                event.key !== 'Delete' &&
+                                event.key !== 'ArrowLeft' &&
+                                event.key !== 'ArrowRight' &&
                                 event.key !== 'Tab'
                             ) {
                                 event.preventDefault();
@@ -106,7 +106,11 @@ class MemberForm
                 Select::make('plan_id')
                     ->label('Plans')
                     ->placeholder('Select plan')
-                    ->relationship('Customer.Plans','name')
+                    ->relationship(name: 'Customer.Plans',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn ($query) => $query->select('id', 'name', 'price')
+                                )
+                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} - ₹{$record->price}")
                     ->searchable()
                     ->preload()
                     ->live(onBlur:true)

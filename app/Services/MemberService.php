@@ -34,9 +34,9 @@ class MemberService
 
     public function calculatePlanExpiry(string $joinDate, string $monthsDuration)
     {
-        $days = 30 * $monthsDuration - 1; //calculating days want to add
+        $days = 30 * $monthsDuration; //calculating days want to add
         $planExpiry = Carbon::parse($joinDate)->addDays($days)->format('Y-m-d');
-        
+
         return $planExpiry;
     }
 
