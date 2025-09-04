@@ -2,6 +2,7 @@
 
 namespace App\Filament\Customer\Resources\Members\Tables;
 
+use App\Models\Plan;
 use App\Services\MemberService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -16,6 +17,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\Wizard\Step;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -96,10 +98,12 @@ class MembersTable
                 ->tooltip('Renew Plan')
                 ->fillForm(function ($record): array {
                     return ['expired_date' => $record->plan_expiry];
-                })
-                ->schema([
-                    DatePicker::make('expired_date')
-                    ->disabled(),
+                })->steps([
+
+                Step::make('Basic Information')
+                    ->schema([
+                        DatePicker::make('expired_date')
+                            ->disabled(),
 
                     Checkbox::make('is_new_renew_date')
                         ->label('Want to edit renew date..? (else renew from expired date)')
@@ -155,7 +159,7 @@ class MembersTable
                     ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} - ₹{$record->price}")
                     // ->searchable()
                     // ->preload()
-                    ->live(true)
+                    ->live(onBlur:true)
                     ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
 
                         if (! $state) {
@@ -187,7 +191,7 @@ class MembersTable
 
                     DatePicker::make('new_expiry_date')
                     ->disabled(),
-
+                    ]),
                 ])
                 ->action(function (array $data, $record) {
                     dd('hey', $data,$record);
