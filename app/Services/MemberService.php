@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\DTOs\MemberDTO;
+use App\DTOs\PaymentDTO;
 use App\Interfaces\MemberRepoInterface;
+use App\Interfaces\PaymentRepoInterface;
+use App\Interfaces\PlanRepoInterface;
 use App\Models\Member;
 use Carbon\Carbon;
 
@@ -13,7 +16,9 @@ class MemberService
      * Create a new class instance.
      */
     public function __construct(
-        private MemberRepoInterface $memberRepoInterface
+        private MemberRepoInterface $memberRepoInterface,
+        private PlanRepoInterface $planRepoInterface,
+        private PaymentRepoInterface $paymentRepoInterface
     )
     {
         //
@@ -45,6 +50,30 @@ class MemberService
         $member = Member::find($member_id);
         if($member->plan_expiry < now())
         {
+            return true;
+        }
+        return false;
+    }
+
+    public function renewNow(Member $member, int $plan_id, $renewFrom, string $payment_method): bool
+    {
+        $plan = $this->planRepoInterface->findById($plan_id);
+
+        if($plan != null) {
+
+            $newExpiry = $this->calculatePlanExpiry($renewFrom, $plan->duration_months);
+            $member->plan_expiry = $newExpiry;
+            $member->save();
+
+            // insert payment info
+            $this->paymentRepoInterface->create(PaymentDTO::fromArray([
+                'member_id' =>  $member->id,
+                'amount'    =>  $plan->price,
+                'paid_on'   =>  now(),
+                'valid_until'   =>  $newExpiry,
+                'method'        =>  $payment_method
+            ]));
+
             return true;
         }
         return false;

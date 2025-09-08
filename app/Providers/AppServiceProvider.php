@@ -3,7 +3,11 @@
 namespace App\Providers;
 
 use App\Interfaces\MemberRepoInterface;
+use App\Interfaces\PaymentRepoInterface;
+use App\Interfaces\PlanRepoInterface;
 use App\Repositories\MemberRepo;
+use App\Repositories\PaymentRepo;
+use App\Repositories\PlanRepo;
 use App\Responses\LoginResponse;
 use App\Responses\LogoutResponse;
 use Filament\Auth\Http\Responses\Contracts\LoginResponse as FilamentLoginResponse;
@@ -24,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(MemberRepoInterface::class, MemberRepo::class);
+        $this->app->bind(PlanRepoInterface::class, PlanRepo::class);
+        $this->app->bind(PaymentRepoInterface::class, PaymentRepo::class);
     }
 
     /**

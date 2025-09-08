@@ -2,6 +2,7 @@
 
 namespace App\Filament\Customer\Resources\Members\Schemas;
 
+use App\Models\Plan;
 use App\Services\MemberService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -13,6 +14,9 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\Wizard;
+use Filament\Schemas\Components\Wizard\Step;
+use Filament\Support\Icons\Heroicon;
 use Filament\Schemas\Schema;
 
 class MemberForm
@@ -21,6 +25,21 @@ class MemberForm
     {
         return $schema
             ->components([
+                Wizard::make([
+                    Step::make('Basic Information')
+                    ->schema(self::getBasicInformation())->columns(2),
+
+                    Step::make('Billing')
+                    ->icon(Heroicon::CreditCard)
+                    ->schema(self::getBilling()),
+
+                ])->skippable(false)->columnSpan('full'),
+            ]);
+    }
+
+    private static function getBasicInformation(): array
+    {
+        return [
                 TextInput::make('name')
                     ->placeholder('Enter name here')
                     ->required()
@@ -117,10 +136,18 @@ class MemberForm
                     ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
 
                         if($state != null) {
-                            $monthsDuration = Filament::auth()->user()->Customer->Plans()->find($state)->duration_months;
-                            $planExpiry = app(MemberService::class)->calculatePlanExpiry($get('joining_date'),$monthsDuration);
+                            $plan = Plan::query()
+                                ->select('duration_months','price')
+                                ->find($state);
+                            if($plan) {
 
-                            $set('plan_expiry', $planExpiry);
+                                $monthsDuration = $plan->duration_months;
+                                $planExpiry = app(MemberService::class)->calculatePlanExpiry($get('joining_date'),$monthsDuration);
+                                $set('total_amount', $plan->price);
+                                $set('plan_expiry', $planExpiry);
+
+                            }
+
                         }
                     })
                     ->required()
@@ -138,7 +165,24 @@ class MemberForm
                     ->imageResizeTargetWidth('450')
                     ->imageResizeTargetHeight('450')
                     ->image(),
+                ];
+    }
+    private static function getBilling(): array
+    {
+        return [
+                TextInput::make('total_amount')
+                    ->prefix('₹')
+                    ->disabled()
+                    ->required(),
 
-            ]);
+                Select::make('payment_method')
+                    ->label('Payment method')
+                    ->searchable()
+                    ->options([
+                        'UPI'   => 'UPI (Online)',
+                        'CASH'  =>  'CASH (Offline)'
+                    ])
+                    ->required()
+                ];
     }
 }
