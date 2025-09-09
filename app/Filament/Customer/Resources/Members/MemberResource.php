@@ -9,6 +9,7 @@ use App\Filament\Customer\Resources\Members\Pages\ViewMember;
 use App\Filament\Customer\Resources\Members\Schemas\MemberForm;
 use App\Filament\Customer\Resources\Members\Schemas\MemberInfolist;
 use App\Filament\Customer\Resources\Members\Tables\MembersTable;
+use App\Filament\Customer\Resources\Members\Widgets\MemberOverview;
 use App\Models\Member;
 use BackedEnum;
 use Filament\Facades\Filament;
@@ -34,6 +35,13 @@ class MemberResource extends Resource
     {
         return MemberForm::configure($schema);
     }
+
+    // public static function getWidgets(): array
+    // {
+    //     return [
+    //         MemberOverview::class
+    //     ];
+    // }
 
     public static function infolist(Schema $schema): Schema
     {

@@ -22,7 +22,11 @@ use Filament\Schemas\Components\Wizard\Step;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\Indicator;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 
 class MembersTable
 {
@@ -59,18 +63,27 @@ class MembersTable
                     ->default('Not have plan')
                     ->formatStateUsing(function ($record) {
                         // return $record->id;
+                        if($record->is_staff === 1) {
+                            return 'Staff';
+                        }
                         if ( app(MemberService::class)->isPlanExpired($record->id) ) {
                             return 'Expired';
                         }
                         return 'Active';
                     })
                     ->icon(function ($record) {
+                        if($record->is_staff === 1) {
+                            return Heroicon::CheckCircle;
+                        }
                         if ( app(MemberService::class)->isPlanExpired($record->id) ) {
                             return Heroicon::XCircle;
                         }
                         return Heroicon::CheckCircle;
                     })
                     ->iconColor(function ($record) {
+                        if($record->is_staff === 1) {
+                            return 'primary';
+                        }
                         if ( app(MemberService::class)->isPlanExpired($record->id) ) {
                             return 'danger';
                         }
@@ -78,6 +91,9 @@ class MembersTable
                     })
                     ->badge()
                     ->color(function ($record) {
+                        if($record->is_staff === 1) {
+                            return 'primary';
+                        }
                         if ( app(MemberService::class)->isPlanExpired($record->id) ) {
                             return 'danger';
                         }
@@ -88,11 +104,56 @@ class MembersTable
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-            ])
+            ])->recordAction(null)
             ->filters([
-                //
+                SelectFilter::make('is_staff')
+                ->label('Select role')
+                ->options([
+                    '1' => 'Staff',
+                    '0' => 'Member'
+                ]),
+                Filter::make('plan_expiry')
+                ->label('Plan status')
+                ->schema([
+                    Select::make('status')
+                    ->options([
+                        '1' => 'Active',
+                        '0' =>  'Expired'
+                    ]),
+                ])
+                ->query(function (Builder $query, array $data) {
+                    if($data['status'] == 1) {
+                        return $query->where('plan_expiry', '>', now());
+                    } 
+                    if($data['status'] == 0) {
+                        return $query->where('plan_expiry', '<', now());
+                    }
+                })
+                ->indicateUsing(function (array $data): array {
+                    $indicators = [];
+                    if ($data['status'] == 1) {
+                        $indicators[] = Indicator::make('Active members')
+                            ->removable(true)
+                            ->removeField('status');
+                    }
+                    if ($data['status'] == 0) {
+                        $indicators[] = Indicator::make('Expired members')
+                            ->removable(true)
+                            ->removeField('status');
+                    }
+
+
+                    return $indicators;
+                })
             ])
             ->recordActions([
+                Action::make('sendWhatsapp')
+                ->label('')
+                ->tooltip('Send Expired Message')
+                ->icon('heroicon-m-chat-bubble-left')
+                ->url(fn ($record) => self::getWhatsappUrl($record))
+                ->openUrlInNewTab(), // ensures WhatsApp opens
+
                 Action::make('renew_plan')
                     ->label('')
                     ->icon(Heroicon::ArrowPath)
@@ -130,7 +191,12 @@ class MembersTable
                             }
                         }
                     })
-                    ->modalSubmitActionLabel('Renew'),
+                    ->modalSubmitActionLabel('Renew')
+                    ->visible(function ($record)  {
+                        if(app(MemberService::class)->isPlanExpired($record->id) && $record->is_staff != 1) {
+                            return true;
+                        }
+                    }),
 
                 ViewAction::make()->label(''),
                 EditAction::make()->label(''),
@@ -196,13 +262,17 @@ class MembersTable
                 Select::make('plan_id')
                 ->label('Plans')
                 ->placeholder('Select plan')
-                ->relationship(name: 'Customer.Plans',
-                            titleAttribute: 'name',
-                            modifyQueryUsing: fn ($query) => $query->select('id', 'name', 'price')
-                            )
-                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} - ₹{$record->price}")
-                // ->searchable()
-                // ->preload()
+                ->options(function () {
+                        $plans = Plan::where('customer_id', Filament::auth()->user()->Customer->id )
+                        ->get()
+                        ->mapWithKeys(function ($plan) {
+                            return [ $plan->id => "{$plan->name} - ₹{$plan->price}" ];
+                        });
+
+                        return $plans;
+                })
+                ->searchable()
+                ->preload()
                 ->live(onBlur:true)
                 ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
 
@@ -248,5 +318,12 @@ class MembersTable
                     ])
                     ->required()
                 ];
+    }
+    protected static function getWhatsappUrl($record): string
+    {
+        $phone = $record->phone;
+        $message = urlencode("Hello {$record->name}, your gym membership expired on {$record->plan_expiry}. Please renew to continue enjoying the services.");
+
+        return "https://wa.me/{$phone}?text={$message}";
     }
 }
