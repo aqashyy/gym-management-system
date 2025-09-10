@@ -65,7 +65,7 @@ class MemberResource extends Resource
         return [
             'index' => ListMembers::route('/'),
             // 'create' => CreateMember::route('/create'),
-            // 'view' => ViewMember::route('/{record}'),
+            'view' => ViewMember::route('/{record}'),
             // 'edit' => EditMember::route('/{record}/edit'),
         ];
     }

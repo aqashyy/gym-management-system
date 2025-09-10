@@ -21,6 +21,9 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\Layout\Split;
+use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\Indicator;
@@ -34,77 +37,14 @@ class MembersTable
     {
         return $table
             ->columns([
-                TextColumn::make('fingerprint_id')
-                    ->label('Finger ID')
-                    ->icon(Heroicon::OutlinedFingerPrint)
-                    ->badge()
-                    ->color('primary')
-                    ->searchable(),
-
-                TextColumn::make('name')
-                    ->searchable(),
-                TextColumn::make('dob')
-                    ->date()
-                    ->sortable(),
-                TextColumn::make('phone')
-                    ->searchable(),
-                TextColumn::make('joining_date')
-                    ->date()
-                    ->sortable(),
-
-                IconColumn::make('is_staff')
-                    ->boolean(),
-
-                TextColumn::make('plan_expiry')
-                    ->date()
-                    ->sortable(),
-
-                TextColumn::make('plan_status')
-                    ->default('Not have plan')
-                    ->formatStateUsing(function ($record) {
-                        // return $record->id;
-                        if($record->is_staff === 1) {
-                            return 'Staff';
-                        }
-                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
-                            return 'Expired';
-                        }
-                        return 'Active';
-                    })
-                    ->icon(function ($record) {
-                        if($record->is_staff === 1) {
-                            return Heroicon::CheckCircle;
-                        }
-                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
-                            return Heroicon::XCircle;
-                        }
-                        return Heroicon::CheckCircle;
-                    })
-                    ->iconColor(function ($record) {
-                        if($record->is_staff === 1) {
-                            return 'primary';
-                        }
-                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
-                            return 'danger';
-                        }
-                        return 'success';
-                    })
-                    ->badge()
-                    ->color(function ($record) {
-                        if($record->is_staff === 1) {
-                            return 'primary';
-                        }
-                        if ( app(MemberService::class)->isPlanExpired($record->id) ) {
-                            return 'danger';
-                        }
-                        return 'success';
-                    }),
-
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])->recordAction(null)
+                Stack::make(self::getColums())
+            ])
+            ->contentGrid([
+                'sm' => 1,
+                'md' => 2,
+                'xl' => 3,
+            ])
+            ->recordAction(null)
             ->filters([
                 SelectFilter::make('is_staff')
                 ->label('Select role')
@@ -112,91 +52,41 @@ class MembersTable
                     '1' => 'Staff',
                     '0' => 'Member'
                 ]),
-                Filter::make('plan_expiry')
-                ->label('Plan status')
-                ->schema([
-                    Select::make('status')
-                    ->options([
-                        '1' => 'Active',
-                        '0' =>  'Expired'
-                    ]),
-                ])
-                ->query(function (Builder $query, array $data) {
-                    if($data['status'] == 1) {
+
+                SelectFilter::make('plan_expiry')
+                ->multiple()
+                ->label('Subscription status')
+                ->options([
+                    '1' => 'Active',
+                    '0' =>  'Expired'
+                ])->query(function (Builder $query, array $data) {
+                    // dd($data);
+                    if (! isset($data['status'])) {
+                        return $query; // nothing selected → show all
+                    }
+
+                    if ($data['status'] == '1') {
                         return $query->where('plan_expiry', '>', now());
-                    } 
-                    if($data['status'] == 0) {
+                    }
+
+                    if ($data['status'] == '0') {
                         return $query->where('plan_expiry', '<', now());
                     }
-                })
-                ->indicateUsing(function (array $data): array {
-                    $indicators = [];
-                    if ($data['status'] == 1) {
-                        $indicators[] = Indicator::make('Active members')
-                            ->removable(true)
-                            ->removeField('status');
-                    }
-                    if ($data['status'] == 0) {
-                        $indicators[] = Indicator::make('Expired members')
-                            ->removable(true)
-                            ->removeField('status');
-                    }
 
+                    return $query;
+                }),
 
-                    return $indicators;
-                })
             ])
             ->recordActions([
                 Action::make('sendWhatsapp')
                 ->label('')
-                ->tooltip('Send Expired Message')
-                ->icon('heroicon-m-chat-bubble-left')
+                ->tooltip('Send Reminder')
+                ->icon(Heroicon::OutlinedBellAlert)
                 ->url(fn ($record) => self::getWhatsappUrl($record))
-                ->openUrlInNewTab(), // ensures WhatsApp opens
+                ->openUrlInNewTab()
+                ->visible(fn ($record) => app(MemberService::class)->isPlanExpired($record->id) &&  $record->is_staff == 0), // ensures WhatsApp opens
 
-                Action::make('renew_plan')
-                    ->label('')
-                    ->icon(Heroicon::ArrowPath)
-                    ->tooltip('Renew Plan')
-                    ->fillForm(function ($record): array {
-                        return ['expired_date' => $record->plan_expiry];
-                    })->steps([
-
-                    Step::make('Renew Information')
-                        ->schema(self::getRenewInformation()),
-                    Step::make('Billing Information')
-                        ->icon(Heroicon::CreditCard)
-                        ->schema(self::getBilling())
-                    ])
-                    ->action(function (array $data, $record) {
-                        
-                        // dd('hey', $data,$record);
-                        $renew_from_date = $data['is_new_renew_date'] == true ? $data['new_renew_date'] : $record->plan_expiry;
-                        if($renew_from_date != null) {
-                            // renew member plan with renew from date and selected plan
-                            $res = app(MemberService::class)
-                                    ->renewNow($record, $data['plan_id'], $renew_from_date, $data['payment_method']);
-
-                            if($res == true) {
-
-                                Notification::make('success')
-                                ->success()
-                                ->body('Member renewed successfullyy')
-                                ->send();
-                            } else {
-                                Notification::make('success')
-                                ->danger()
-                                ->body('Something went wrong.. try again..')
-                                ->send();
-                            }
-                        }
-                    })
-                    ->modalSubmitActionLabel('Renew')
-                    ->visible(function ($record)  {
-                        if(app(MemberService::class)->isPlanExpired($record->id) && $record->is_staff != 1) {
-                            return true;
-                        }
-                    }),
+                self::getRenewAction(),
 
                 ViewAction::make()->label(''),
                 EditAction::make()->label(''),
@@ -325,5 +215,127 @@ class MembersTable
         $message = urlencode("Hello {$record->name}, your gym membership expired on {$record->plan_expiry}. Please renew to continue enjoying the services.");
 
         return "https://wa.me/{$phone}?text={$message}";
+    }
+    protected static function getColums()
+    {
+        return [
+            Split::make([
+                ImageColumn::make('photo')
+                            ->defaultImageUrl('https://placehold.co/400')
+                            ->circular(),
+                TextColumn::make('plan_status')
+                        ->alignEnd()
+                        ->default('Not have plan')
+                        ->formatStateUsing(function ($record) {
+                            // return $record->id;
+                            if($record->is_staff === 1) {
+                                return 'Staff';
+                            }
+                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                return 'Expired';
+                            }
+                            return 'Active';
+                        })
+                        ->icon(function ($record) {
+                            if($record->is_staff === 1) {
+                                return Heroicon::CheckCircle;
+                            }
+                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                return Heroicon::XCircle;
+                            }
+                            return Heroicon::CheckCircle;
+                        })
+                        ->iconColor(function ($record) {
+                            if($record->is_staff === 1) {
+                                return 'primary';
+                            }
+                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                return 'danger';
+                            }
+                            return 'success';
+                        })
+                        ->badge()
+                        ->color(function ($record) {
+                            if($record->is_staff === 1) {
+                                return 'primary';
+                            }
+                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                return 'danger';
+                            }
+                            return 'success';
+                }),
+            ]),
+
+            Split::make([
+
+                TextColumn::make('name')
+                ->searchable(),
+                TextColumn::make('fingerprint_id')
+                        ->label('Finger ID')
+                        ->icon(Heroicon::OutlinedFingerPrint)
+                        ->badge()
+                        ->color('primary')
+                        ->searchable()
+                        ->alignEnd(),
+            ]),
+            TextColumn::make('phone')
+                ->formatStateUsing(fn ($state) => "+".$state)
+                ->searchable(),
+            TextColumn::make('joining_date')
+                ->since()
+                ->prefix('Joined : ')
+                ->sortable(),
+
+            TextColumn::make('plan_expiry')
+                ->date()
+                ->sortable(),
+            ];
+    }
+
+    public static function getRenewAction()
+    {
+        return Action::make('renew_plan')
+                    ->label('')
+                    ->icon(Heroicon::ArrowPath)
+                    ->tooltip('Renew Plan')
+                    ->fillForm(function ($record): array {
+                        return ['expired_date' => $record->plan_expiry];
+                    })->steps([
+
+                    Step::make('Renew Information')
+                        ->schema(self::getRenewInformation()),
+                    Step::make('Billing Information')
+                        ->icon(Heroicon::CreditCard)
+                        ->schema(self::getBilling())
+                    ])
+                    ->action(function (array $data, $record) {
+
+                        // dd('hey', $data,$record);
+                        $renew_from_date = $data['is_new_renew_date'] == true ? $data['new_renew_date'] : $record->plan_expiry;
+                        if($renew_from_date != null) {
+                            // renew member plan with renew from date and selected plan
+                            $res = app(MemberService::class)
+                                    ->renewNow($record, $data['plan_id'], $renew_from_date, $data['payment_method']);
+
+                            if($res == true) {
+
+                                Notification::make('success')
+                                ->success()
+                                ->body('Member renewed successfullyy')
+                                ->send();
+                            } else {
+                                Notification::make('success')
+                                ->danger()
+                                ->body('Something went wrong.. try again..')
+                                ->send();
+                            }
+                        }
+                    })
+                    ->modalSubmitActionLabel('Renew')
+                    ->visible(function ($record)  {
+                        if(app(MemberService::class)->isPlanExpired($record->id) && $record->is_staff != 1) {
+                            return true;
+                        }
+                    });
     }
 }
