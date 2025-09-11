@@ -78,14 +78,9 @@ class MembersTable
 
             ])
             ->recordActions([
-                Action::make('sendWhatsapp')
-                ->label('')
-                ->tooltip('Send Reminder')
-                ->icon(Heroicon::OutlinedBellAlert)
-                ->url(fn ($record) => self::getWhatsappUrl($record))
-                ->openUrlInNewTab()
-                ->visible(fn ($record) => app(MemberService::class)->isPlanExpired($record->id) &&  $record->is_staff == 0), // ensures WhatsApp opens
 
+                self::getWhatsappReminderAction('renew')
+                    ->visible(fn ($record) => app(MemberService::class)->isPlanExpired($record->id) &&  $record->is_staff == 0),
                 self::getRenewAction(),
 
                 ViewAction::make()->label(''),
@@ -97,7 +92,7 @@ class MembersTable
                 ]),
             ]);
     }
-    private static function getRenewInformation(): array
+    private static function getRenewSchema(): array
     {
         return [
                 DatePicker::make('expired_date')
@@ -158,33 +153,33 @@ class MembersTable
                         ->mapWithKeys(function ($plan) {
                             return [ $plan->id => "{$plan->name} - ₹{$plan->price}" ];
                         });
-
                         return $plans;
                 })
-                ->searchable()
-                ->preload()
-                ->live(onBlur:true)
-                ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
+                // ->searchable()
+                // ->preload()
+                // ->live(onBlur:true)
+                // ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
 
-                    if (! $state) {
-                        return;
-                    }
+                //     if (! $state) {
+                //         return;
+                //     }
 
-                    $renew_from_date = $get('is_new_renew_date') == true
-                        ? ($get('new_renew_date') ? $get('new_renew_date') : $get('expired_date'))
-                        : $get('expired_date');
+                //     $renew_from_date = $get('is_new_renew_date') == true
+                //         ? ($get('new_renew_date') ? $get('new_renew_date') : $get('expired_date'))
+                //         : $get('expired_date');
 
-                    $plan = Plan::query()
-                        ->select('duration_months','price')
-                        ->find($state);
-                    if($plan) {
+                //     $plan = Plan::query()
+                //         ->select('duration_months','price')
+                //         ->find($state);
+                //     if($plan) {
 
-                        $planExpiry = app(MemberService::class)->calculatePlanExpiry($renew_from_date,$plan->duration_months);
+                //         $planExpiry = app(MemberService::class)->calculatePlanExpiry($renew_from_date,$plan->duration_months);
 
-                        $set('total_amount', $plan->price);
-                        $set('new_expiry_date', $planExpiry);
-                    }
-                })
+                //         $set('total_amount', $plan->price);
+                //         $set('new_expiry_date', $planExpiry);
+                //     }
+                // })
+                ->default(fn ($record) => $record->plan_id)
                 ->required(),
 
                 DatePicker::make('new_expiry_date')
@@ -209,7 +204,16 @@ class MembersTable
                     ->required()
                 ];
     }
-    protected static function getWhatsappUrl($record): string
+    public static function getWhatsappReminderAction($template)
+    {
+        return Action::make('sendWhatsapp')
+                ->label('')
+                ->tooltip('Send Reminder')
+                ->icon(Heroicon::OutlinedBellAlert)
+                ->url(fn ($record) => self::getWhatsappUrl($record,$template))
+                ->openUrlInNewTab(); // ensures WhatsApp opens
+    }
+    protected static function getWhatsappUrl($record, $template): string
     {
         $phone = $record->phone;
         $message = urlencode("Hello {$record->name}, your gym membership expired on {$record->plan_expiry}. Please renew to continue enjoying the services.");
@@ -303,7 +307,7 @@ class MembersTable
                     })->steps([
 
                     Step::make('Renew Information')
-                        ->schema(self::getRenewInformation()),
+                        ->schema(self::getRenewSchema()),
                     Step::make('Billing Information')
                         ->icon(Heroicon::CreditCard)
                         ->schema(self::getBilling())

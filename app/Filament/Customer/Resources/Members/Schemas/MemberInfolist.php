@@ -5,12 +5,15 @@ namespace App\Filament\Customer\Resources\Members\Schemas;
 use App\Filament\Customer\Resources\Members\Tables\MembersTable;
 use App\Interfaces\PlanRepoInterface;
 use App\Services\MemberService;
+use Carbon\Carbon;
+use Filament\Actions\Action;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
 
 class MemberInfolist
@@ -19,6 +22,7 @@ class MemberInfolist
     {
         return $schema
             ->components([
+                // Profile section
                 Section::make([
                         ImageEntry::make('photo')
                         ->hiddenLabel()
@@ -27,11 +31,11 @@ class MemberInfolist
                         ->imageWidth(150)
                         ->imageHeight(150)
                         ->defaultImageUrl('https://placehold.co/400'),
-
+                        // personal info
                         Section::make([
                             Grid::make()
                                 ->schema([
-                                    
+
                                     TextEntry::make('fingerprint_id')
                                         ->hiddenLabel()
                                         ->icon(Heroicon::OutlinedFingerPrint)
@@ -102,10 +106,10 @@ class MemberInfolist
 
                             ])
                             ->columns(['default' => 2 , 'md' => 2])
-                            
+
                         ])
                         ->columns(1),
-                        // extra info section
+                        // health info section
                         Section::make([
                             TextEntry::make('dob')
                                 ->icon(Heroicon::Cake)
@@ -120,10 +124,12 @@ class MemberInfolist
 
                             TextEntry::make('weight')
                                 ->numeric()
+                                ->icon(Heroicon::Scale)
                                 ->suffix(' kg')
                                 ->hiddenLabel(),
                             TextEntry::make('height')
                                 ->numeric()
+                                ->icon(Heroicon::ChevronDoubleUp)
                                 ->suffix(' cm')
                                 ->hiddenLabel(),
                         ])
@@ -134,35 +140,81 @@ class MemberInfolist
                     'default' => 1, // mobile → stack (image on top, details below)
                     'md' => 2,      // desktop → 2 columns (image left, details right)
                 ]),
+                // Membership details section
+                Section::make('Memberships')
+                        ->schema([
+                            // plan status group
+                            Grid::make()
+                                ->schema([
+                                    TextEntry::make('plan_id')
+                                        ->hiddenLabel()
+                                        ->alignLeft()
+                                        ->formatStateUsing(fn ($state) => app(PlanRepoInterface::class)->findById($state)->name),
+                                    TextEntry::make('plan_expiry')
+                                        ->hiddenLabel()
+                                        ->formatStateUsing(function ($record) {
+                                            // return $record->id;
+                                            if($record->is_staff === 1) {
+                                                return 'Staff';
+                                            }
+                                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                                return 'Expired ' . Carbon::parse($record->plan_expiry)->diffForHumans(now(), true). ' ago';
+                                            }
+                                            return 'Active';
+                                        })
+                                        ->icon(function ($record) {
+                                            if($record->is_staff === 1) {
+                                                return Heroicon::CheckCircle;
+                                            }
+                                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                                return Heroicon::XCircle;
+                                            }
+                                            return Heroicon::CheckCircle;
+                                        })
+                                        ->iconColor(function ($record) {
+                                            if($record->is_staff === 1) {
+                                                return 'primary';
+                                            }
+                                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                                return 'danger';
+                                            }
+                                            return 'success';
+                                        })
+                                        ->badge()
+                                        ->color(function ($record) {
+                                            if($record->is_staff === 1) {
+                                                return 'primary';
+                                            }
+                                            if ( app(MemberService::class)->isPlanExpired($record->id) ) {
+                                                return 'danger';
+                                            }
+                                            return 'success';
+                                    }),
+                                ])
+                                ->columns(['default' => 2, 'md' => 2]),
+                            // dates group
+                            Grid::make()
+                                ->schema([
+                                    TextEntry::make('joining_date')
+                                        ->label('Joined Date')
+                                        ->date(),
+                                    TextEntry::make('plan_expiry')
+                                        ->label('Expired Date')
+                                        ->date(),
+                                ])
+                                ->columns(['default' => 2, 'md' => 2]),
+                                // actions group
+                            Grid::make()
+                                ->schema([
+                                    MembersTable::getRenewAction()->label('Renew Now')
+                                        ->size(Size::Large),
 
-
-
-
-                TextEntry::make('plan_id')
-                    ->label('Current plan')
-                    ->formatStateUsing(fn ($state) => app(PlanRepoInterface::class)->findById($state)->name),
-                TextEntry::make('dob')
-                    ->date(),
-                TextEntry::make('phone'),
-                TextEntry::make('blood_group'),
-                TextEntry::make('weight')
-                    ->numeric(),
-                TextEntry::make('height')
-                    ->numeric(),
-                TextEntry::make('joining_date')
-                    ->date(),
-                TextEntry::make('photo'),
-                TextEntry::make('fingerprint_id'),
-                IconEntry::make('is_staff')
-                    ->boolean(),
-                TextEntry::make('plan_expiry')
-                ->afterLabel(MembersTable::getRenewAction())
-
-                    ->date(),
-                TextEntry::make('created_at')
-                    ->dateTime(),
-                TextEntry::make('updated_at')
-                    ->dateTime(),
+                                    MembersTable::getWhatsappReminderAction('renew')
+                                        ->label('Send Reminder')
+                                        ->visible(fn ($record) => app(MemberService::class)->isPlanExpired($record->id) &&  $record->is_staff == 0),
+                                ])
+                                ->columns(['default' => 2, 'md' => 2]),
+                        ]),
             ]);
     }
 }
