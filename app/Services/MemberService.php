@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTOs\MemberDTO;
 use App\DTOs\PaymentDTO;
+use App\DTOs\RenewDTO;
 use App\Interfaces\MemberRepoInterface;
 use App\Interfaces\PaymentRepoInterface;
 use App\Interfaces\PlanRepoInterface;
@@ -55,13 +56,14 @@ class MemberService
         return false;
     }
 
-    public function renewNow(Member $member, int $plan_id, $renewFrom, string $payment_method): bool
+    public function renewNow(RenewDTO $renewDTO): bool
     {
-        $plan = $this->planRepoInterface->findById($plan_id);
+        $plan = $this->planRepoInterface->findById($renewDTO->plan_id);
+        $member = $this->memberRepoInterface->findById($renewDTO->member_id);
 
-        if($plan != null) {
+        if($plan != null && $member != null) {
 
-            $newExpiry = $this->calculatePlanExpiry($renewFrom, $plan->duration_months);
+            $newExpiry = $this->calculatePlanExpiry($renewDTO->renew_from, $plan->duration_months);
             $member->plan_expiry = $newExpiry;
             $member->save();
 
@@ -69,9 +71,10 @@ class MemberService
             $this->paymentRepoInterface->create(PaymentDTO::fromArray([
                 'member_id' =>  $member->id,
                 'amount'    =>  $plan->price,
+                'recieved_amount' => $renewDTO->recieved_amount,
                 'paid_on'   =>  now(),
                 'valid_until'   =>  $newExpiry,
-                'method'        =>  $payment_method
+                'method'        =>  $renewDTO->payment_method
             ]));
 
             return true;

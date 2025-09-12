@@ -2,6 +2,7 @@
 
 namespace App\Filament\Customer\Resources\Members\Tables;
 
+use App\DTOs\RenewDTO;
 use App\Models\Plan;
 use App\Services\MemberService;
 use Filament\Actions\Action;
@@ -13,12 +14,14 @@ use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard\Step;
+use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
@@ -155,31 +158,31 @@ class MembersTable
                         });
                         return $plans;
                 })
-                // ->searchable()
-                // ->preload()
-                // ->live(onBlur:true)
-                // ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
+                ->searchable()
+                ->preload()
+                ->live(onBlur:true)
+                ->afterStateUpdated(function(Set $set,Get $get, ?string $state) {
 
-                //     if (! $state) {
-                //         return;
-                //     }
+                    if (! $state) {
+                        return;
+                    }
 
-                //     $renew_from_date = $get('is_new_renew_date') == true
-                //         ? ($get('new_renew_date') ? $get('new_renew_date') : $get('expired_date'))
-                //         : $get('expired_date');
+                    $renew_from_date = $get('is_new_renew_date') == true
+                        ? ($get('new_renew_date') ? $get('new_renew_date') : $get('expired_date'))
+                        : $get('expired_date');
 
-                //     $plan = Plan::query()
-                //         ->select('duration_months','price')
-                //         ->find($state);
-                //     if($plan) {
+                    $plan = Plan::query()
+                        ->select('duration_months','price')
+                        ->find($state);
+                    if($plan) {
 
-                //         $planExpiry = app(MemberService::class)->calculatePlanExpiry($renew_from_date,$plan->duration_months);
+                        $planExpiry = app(MemberService::class)->calculatePlanExpiry($renew_from_date,$plan->duration_months);
 
-                //         $set('total_amount', $plan->price);
-                //         $set('new_expiry_date', $planExpiry);
-                //     }
-                // })
-                ->default(fn ($record) => $record->plan_id)
+                        $set('total_amount', $plan->price);
+                        $set('new_expiry_date', $planExpiry);
+                    }
+                })
+                ->reactive()
                 ->required(),
 
                 DatePicker::make('new_expiry_date')
@@ -190,16 +193,43 @@ class MembersTable
     {
         return [
                 TextInput::make('total_amount')
+                    ->label('Total amount payable')
                     ->prefix('₹')
-                    ->disabled()
+                    ->readonly()
                     ->required(),
+                TextInput::make('recieved_amount')
+                    ->label('Recieved amount')
+                    ->prefix('₹')
+                    ->numeric()
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function (Get $get, Set $set, ?string $state) {
+                        if(filled($state)) {
+                            // Get the value of total_amount
+                            $totalAmount = (float) $get('total_amount'); 
+                            
+                            // Convert the received amount to a float
+                            $receivedAmount = (float) $state;
 
-                Select::make('payment_method')
+                            // Calculate the balance
+                            $balance = $totalAmount - $receivedAmount;
+
+                            // Set the balance_amount field
+                            $set('balance_amount', $balance);
+                        }
+                    }),
+
+                TextInput::make('balance_amount')
+                    ->prefix('₹')
+                    ->readonly(),
+
+                Radio::make('payment_method')
                     ->label('Payment method')
-                    ->searchable()
+                    ->inline()
                     ->options([
                         'UPI'   => 'UPI (Online)',
-                        'CASH'  =>  'CASH (Offline)'
+                        'CASH'  =>  'CASH (Offline)',
+                        'NETBANKING' => 'Netbanking'
                     ])
                     ->required()
                 ];
@@ -273,18 +303,25 @@ class MembersTable
             Split::make([
 
                 TextColumn::make('name')
-                ->searchable(),
+                    ->searchable(),
                 TextColumn::make('fingerprint_id')
                         ->label('Finger ID')
                         ->icon(Heroicon::OutlinedFingerPrint)
                         ->badge()
-                        ->color('primary')
+                        ->color('info')
                         ->searchable()
                         ->alignEnd(),
             ]),
-            TextColumn::make('phone')
-                ->formatStateUsing(fn ($state) => "+".$state)
-                ->searchable(),
+            Split::make([
+
+                TextColumn::make('phone')
+                    ->formatStateUsing(fn ($state) => "+".$state)
+                    ->searchable(),
+                TextColumn::make('gender')
+                    ->badge()
+                    ->alignEnd()
+                    ->color(fn ($state) => $state === 'Male' ? 'gray' : Color::Pink),
+            ]),
             TextColumn::make('joining_date')
                 ->since()
                 ->prefix('Joined : ')
@@ -303,7 +340,18 @@ class MembersTable
                     ->icon(Heroicon::ArrowPath)
                     ->tooltip('Renew Plan')
                     ->fillForm(function ($record): array {
-                        return ['expired_date' => $record->plan_expiry];
+
+                        $plan = $plan = Plan::query()
+                                            ->select('duration_months','price')
+                                            ->find($record->plan_id);
+                        return [
+                            'expired_date'      => $record->plan_expiry,
+                            'plan_id'           => $record->plan_id,
+                            'new_expiry_date'   =>  app(MemberService::class)->calculatePlanExpiry($record->plan_expiry, $plan->duration_months),
+                            'total_amount'      =>  $plan->price,
+                            'recieved_amount'   =>  $plan->price,
+                            'balance_amount'    =>  '0 (Full amount recieved)'
+                        ];
                     })->steps([
 
                     Step::make('Renew Information')
@@ -319,7 +367,13 @@ class MembersTable
                         if($renew_from_date != null) {
                             // renew member plan with renew from date and selected plan
                             $res = app(MemberService::class)
-                                    ->renewNow($record, $data['plan_id'], $renew_from_date, $data['payment_method']);
+                                    ->renewNow(RenewDTO::fromArray([
+                                        'member_id' =>  $record->id,
+                                        'plan_id'   =>  $data['plan_id'],
+                                        'renew_from'=>  $renew_from_date,
+                                        'payment_method'    =>  $data['payment_method'],
+                                        'recieved_amount'   =>  $data['recieved_amount']
+                                    ]));
 
                             if($res == true) {
 

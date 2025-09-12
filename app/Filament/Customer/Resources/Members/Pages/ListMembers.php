@@ -12,6 +12,7 @@ use App\Models\Plan;
 use App\Models\Payment;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -73,6 +74,7 @@ class ListMembers extends ListRecords
                     Payment::create([
                         'member_id'     => $record->id,
                         'amount'        =>  $data['plan_amount'],
+                        'recieved_amount' => $data['recieved_amount'],
                         'method'        =>  $data['payment_method'],
                         'paid_on'       =>  now(),
                         'valid_until'   =>  $data['plan_expiry']
@@ -193,6 +195,7 @@ class ListMembers extends ListRecords
                                 $planExpiry = app(MemberService::class)->calculatePlanExpiry($get('joining_date'),$monthsDuration);
                                 $set('total_amount', $plan->price);
                                 $set('plan_expiry', $planExpiry);
+                                $set('recieved_amount', $plan->price);
 
                             }
 
@@ -212,26 +215,40 @@ class ListMembers extends ListRecords
                     ->imageCropAspectRatio('1:1')
                     ->imageResizeTargetWidth('450')
                     ->imageResizeTargetHeight('450')
-                    ->image(),
+                    ->directory('member-photos/'. str_replace(' ','_', Filament::auth()->user()->Customer->name))
+                    ->required(),
                 ];
     }
     private static function getBilling(): array
     {
         return [
                 TextInput::make('total_amount')
+                    ->label('Total amount payable')
                     ->prefix('₹')
-                    ->disabled()
-                    ->hiddenJs(<<<'JS'
-                        $get('is_staff')
-                    JS)
-                    ->required(fn (Get $get) => $get('is_staff') == false),
+                    ->readonly()
+                    ->required(),
+                TextInput::make('recieved_amount')
+                    ->label('Recieved amount')
+                    ->prefix('₹')
+                    ->numeric()
+                    ->required()
+                    ->afterStateUpdatedJs( <<<'JS'
+                            // Set the balance_amount field
+                            $set('balance_amount', ( $get('total_amount') - $state));
 
-                Select::make('payment_method')
+                    JS),
+
+                TextInput::make('balance_amount')
+                    ->prefix('₹')
+                    ->readonly(),
+
+                Radio::make('payment_method')
                     ->label('Payment method')
-                    ->searchable()
+                    ->inline()
                     ->options([
                         'UPI'   => 'UPI (Online)',
-                        'CASH'  =>  'CASH (Offline)'
+                        'CASH'  =>  'CASH (Offline)',
+                        'NETBANKING' => 'Netbanking'
                     ])
                     ->required(fn (Get $get) => $get('is_staff') == false)
                     ->hiddenJs(<<<'JS'
