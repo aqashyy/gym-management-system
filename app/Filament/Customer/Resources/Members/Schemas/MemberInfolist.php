@@ -8,13 +8,16 @@ use App\Models\Payment;
 use App\Services\MemberService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Colors\Color;
 use Filament\Support\Enums\Size;
@@ -262,6 +265,9 @@ class MemberInfolist
                                     TextEntry::make('amount')
                                         ->hiddenLabel()
                                         ->badge()
+                                        // ->afterLabel(function ($record) {
+                                        //     return Action::make('pay_balance');
+                                        // })
                                         ->color(function ($record) {
                                             $balance = $record->amount - $record->recieved_amount;
                                             if($balance == 0) {
@@ -275,11 +281,23 @@ class MemberInfolist
                                                 return "Fully paid";
                                             }
                                             return "Balance ₹".$balance;
-                                        })
+                                        }),
+                                        
                                 ])
                                 ->columns(['default' => 2, 'md' => 2]),
+                                Grid::make()
+                                        ->schema([
 
-                                TextEntry::make('paid_on'),
+                                            TextEntry::make('paid_on'),
+
+                                            TextEntry::make('amount')
+                                                ->hiddenLabel()
+                                                ->belowContent(function ($record) {
+                                                    return self::payBalanceAction($record);
+                                                })
+                                                ->formatStateUsing(fn ($record) => ''),
+
+                                        ])->columns(['default' => 2, 'md' => 2]),
 
                                 TextEntry::make('recieved_amount')
                             ])
@@ -287,5 +305,56 @@ class MemberInfolist
                     ->visible(fn ($record) => !$record->is_staff),
 
             ]);
+    }
+
+    protected static function payBalanceAction($record)
+    {
+        return Action::make('pay_balance')
+                    ->icon(Heroicon::CurrencyDollar)
+                    ->button()
+                    ->fillForm(function () use($record) {
+                        // dd($record);
+                        return [
+                            'balance_amount' => $record->amount - $record->recieved_amount,
+                            'paying'         => 1,
+                        ];
+                    })
+                    ->schema([
+                        TextInput::make('balance_amount')
+                            ->prefix('₹')
+                            ->readOnly(),
+                        Radio::make('paying')
+                            ->options([
+                                1 => 'Full amount',
+                                0 => 'Custom'
+                            ])
+                            ->live()
+                            ->inline()
+                            ->required(),
+
+                        TextInput::make('recieved_amount')
+                            ->visibleJs(<<<'JS'
+                                $get('paying') == 0
+                            JS)
+                            ->numeric()
+                            ->rules(['integer', 'min:0', 'max:'. $record->amount])
+                            ->maxLength(fn (Get $get) => strlen($get('balance_amount')))
+                            ->required(fn (Get $get) => $get('paying') == 0)
+
+                    ])->action(function ($data) use ($record){
+
+                        if($data['paying'] == 0) {
+                            $payed_amount   =   $data['recieved_amount'];
+                        } else {
+                            $payed_amount   =   $data['balance_amount'];
+                        }
+                        // dd($record);
+                        // update balance amount of payments
+                        $record->recieved_amount += $payed_amount;
+                        $record->save();
+                        
+                    })
+                    ->visible(fn () => $record->amount != $record->recieved_amount)
+                    ->modalSubmitActionLabel('Confirm');
     }
 }

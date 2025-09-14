@@ -12,5 +12,11 @@ class PaymentRepo implements PaymentRepoInterface
     {
         return Payment::create($paymentDTO->toArray());
     }
+
+    public function update(Payment $payment, array $data)
+    {
+        $payment->update($data);
+        return $payment;
+    }
     
 }
