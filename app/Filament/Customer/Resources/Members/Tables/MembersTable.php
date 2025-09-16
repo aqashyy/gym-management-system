@@ -57,22 +57,22 @@ class MembersTable
                 ]),
 
                 SelectFilter::make('plan_expiry')
-                ->multiple()
                 ->label('Subscription status')
                 ->options([
                     '1' => 'Active',
                     '0' =>  'Expired'
                 ])->query(function (Builder $query, array $data) {
-                    // dd($data);
-                    if (! isset($data['status'])) {
+                    if ( isset($data['value']) && $data['value'] == null ) {
                         return $query; // nothing selected → show all
                     }
+                    // dd($data);
 
-                    if ($data['status'] == '1') {
+                    if ($data['value'] == '1') {
                         return $query->where('plan_expiry', '>', now());
                     }
 
-                    if ($data['status'] == '0') {
+                    if ($data['value'] == '0') {
+                        // dd('hrlo');
                         return $query->where('plan_expiry', '<', now());
                     }
 
