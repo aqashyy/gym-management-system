@@ -95,7 +95,7 @@ class MembersTable
                 ]),
             ]);
     }
-    private static function getRenewSchema(): array
+    public static function getRenewSchema(): array
     {
         return [
                 DatePicker::make('expired_date')
@@ -189,7 +189,7 @@ class MembersTable
                 ->disabled(),
             ];
     }
-    private static function getBilling(): array
+    public static function getBilling(): array
     {
         return [
                 TextInput::make('total_amount')
@@ -243,14 +243,14 @@ class MembersTable
                 ->url(fn ($record) => self::getWhatsappUrl($record,$template))
                 ->openUrlInNewTab(); // ensures WhatsApp opens
     }
-    protected static function getWhatsappUrl($record, $template): string
+    public static function getWhatsappUrl($record, $template): string
     {
         $phone = $record->phone;
         $message = urlencode("Hello {$record->name}, your gym membership expired on {$record->plan_expiry}. Please renew to continue enjoying the services.");
 
         return "https://wa.me/{$phone}?text={$message}";
     }
-    protected static function getColums()
+    public static function getColums()
     {
         return [
             Split::make([

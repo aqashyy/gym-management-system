@@ -17,7 +17,14 @@ class ViewMember extends ViewRecord
             Action::make('back')
                 ->label('Back')
                 ->icon('heroicon-o-arrow-left')
-                ->url(fn () => static::getResource()::getUrl('index')) // goes to members list
+                ->url(function () {
+                    $redirect = request()->query('redirect');
+
+                    return match ($redirect) {
+                        'dashboard' => route('filament.customer.pages.dashboard'),
+                        default     => static::getResource()::getUrl('index'),
+                    };
+                })
                 ->color('danger'),
             EditAction::make(),
         ];
