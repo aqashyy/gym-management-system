@@ -55,6 +55,21 @@ class MemberService
         }
         return false;
     }
+    public function planCheckCustomerByFingerId(int $customerId, int $fingerId): bool
+    {
+        $member = Member::where('fingerprint_id', $fingerId)
+                        ->where('customer_id', $customerId)
+                        ->first(['plan_expiry','is_staff']);
+        if($member) {
+
+            if($member->is_staff == 1 || $member->plan_expiry > now())
+            {
+                return true;
+            }
+        }
+        
+        return false;
+    }
 
     public function renewNow(RenewDTO $renewDTO): bool
     {
