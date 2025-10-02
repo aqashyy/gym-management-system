@@ -4,6 +4,7 @@ namespace App\Filament\Customer\Resources\Members\Schemas;
 
 use App\Filament\Customer\Resources\Members\Tables\MembersTable;
 use App\Interfaces\PlanRepoInterface;
+use App\Models\Balance;
 use App\Models\Payment;
 use App\Services\MemberService;
 use Carbon\Carbon;
@@ -15,6 +16,7 @@ use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -301,6 +303,7 @@ class MemberInfolist
 
                                 TextEntry::make('recieved_amount')
                             ])
+                            // ->url('/customer/payments')
                     ])
                     ->visible(fn ($record) => !$record->is_staff),
 
@@ -352,6 +355,20 @@ class MemberInfolist
                         // update balance amount of payments
                         $record->recieved_amount += $payed_amount;
                         $record->save();
+
+                        // insert balance amount to balances
+                        $balances   =   new Balance();
+                        $balances->fill([
+                            'member_id'     => $record->member_id,
+                            'payment_id'    =>  $record->id,
+                            'amount'        =>  $payed_amount
+                        ]);
+                        $balances->save();
+
+                        Notification::make('success')
+                            ->success()
+                            ->body("Balance amount {$payed_amount} successfull payed")
+                            ->send();
                         
                     })
                     ->visible(fn () => $record->amount != $record->recieved_amount)

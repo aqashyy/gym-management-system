@@ -3,8 +3,10 @@
 namespace App\Filament\Customer\Resources\Members\Tables;
 
 use App\DTOs\RenewDTO;
+use App\Interfaces\PlanRepoInterface;
 use App\Models\Plan;
 use App\Services\MemberService;
+use App\Services\WaMessageService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\Concerns\HasTooltip;
@@ -33,6 +35,7 @@ use Filament\Tables\Filters\Indicator;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Notifications\Action as NotificationsAction;
 
 class MembersTable
 {
@@ -78,11 +81,19 @@ class MembersTable
 
                     return $query;
                 }),
+                Filter::make('expiring_in_10_days')
+                    ->query(fn ($query) => 
+                        $query->whereBetween('plan_expiry', [now(), now()->addDays(10)])
+                    ),
+                Filter::make('expired_in_30_days')
+                    ->query(fn ($query) => 
+                        $query->whereBetween('plan_expiry', [now()->subDays(30), now()])
+                    ),
 
             ])
             ->recordActions([
 
-                self::getWhatsappReminderAction('renew')
+                self::getWhatsappReminderAction('plan_expired')
                     ->visible(fn ($record) => app(MemberService::class)->isPlanExpired($record->id) &&  $record->is_staff == 0),
                 self::getRenewAction(),
 
@@ -95,7 +106,7 @@ class MembersTable
                 ]),
             ]);
     }
-    private static function getRenewSchema(): array
+    public static function getRenewSchema(): array
     {
         return [
                 DatePicker::make('expired_date')
@@ -189,7 +200,7 @@ class MembersTable
                 ->disabled(),
             ];
     }
-    private static function getBilling(): array
+    public static function getBilling(): array
     {
         return [
                 TextInput::make('total_amount')
@@ -234,23 +245,36 @@ class MembersTable
                     ->required()
                 ];
     }
-    public static function getWhatsappReminderAction($template)
+    public static function getWhatsappReminderAction($templateName)
     {
+        $label  = 'Send Reminder';
+        $icon   =   Heroicon::OutlinedBellAlert;
+        $confirmationTitle = 'Send WhatsApp Reminder';
+        $confirmationText = 'Are you sure you want to send a WhatsApp reminder to this customer?';
+
+        if($templateName == 'birthday') {
+            $label  = 'Send wish';
+            $icon   =   Heroicon::Cake; 
+            $confirmationTitle = 'Send Birthday Wish';
+            $confirmationText = 'Are you sure you want to send a birthday wish to this customer?';
+        }
         return Action::make('sendWhatsapp')
                 ->label('')
-                ->tooltip('Send Reminder')
-                ->icon(Heroicon::OutlinedBellAlert)
-                ->url(fn ($record) => self::getWhatsappUrl($record,$template))
+                ->tooltip($label)
+                ->icon($icon)
+                ->requiresConfirmation()
+                ->modalHeading($confirmationTitle)
+                ->modalDescription($confirmationText)
+                ->modalSubmitActionLabel('Yes, Send')
+                ->modalCancelActionLabel('Cancel')
+                ->url(function ($record) use($templateName) {
+                    
+                    return app(WaMessageService::class)
+                        ->getWaMsgLink($record->customer_id, $templateName, $record);
+                })
                 ->openUrlInNewTab(); // ensures WhatsApp opens
     }
-    protected static function getWhatsappUrl($record, $template): string
-    {
-        $phone = $record->phone;
-        $message = urlencode("Hello {$record->name}, your gym membership expired on {$record->plan_expiry}. Please renew to continue enjoying the services.");
-
-        return "https://wa.me/{$phone}?text={$message}";
-    }
-    protected static function getColums()
+    public static function getColums()
     {
         return [
             Split::make([
@@ -356,9 +380,10 @@ class MembersTable
 
                     Step::make('Renew Information')
                         ->schema(self::getRenewSchema()),
+
                     Step::make('Billing Information')
                         ->icon(Heroicon::CreditCard)
-                        ->schema(self::getBilling())
+                        ->schema(self::getBilling()),
                     ])
                     ->action(function (array $data, $record) {
 
@@ -366,6 +391,10 @@ class MembersTable
                         $renew_from_date = $data['is_new_renew_date'] == true ? $data['new_renew_date'] : $record->plan_expiry;
                         if($renew_from_date != null) {
                             // renew member plan with renew from date and selected plan
+                            $plan = app(PlanRepoInterface::class)->findById($data['plan_id']);
+                            $newExpiry = app(MemberService::class)->calculatePlanExpiry($renew_from_date, $plan->duration_months);
+                            // dd($newExpiry);
+
                             $res = app(MemberService::class)
                                     ->renewNow(RenewDTO::fromArray([
                                         'member_id' =>  $record->id,
@@ -378,11 +407,32 @@ class MembersTable
                             if($res == true) {
 
                                 Notification::make('success')
-                                ->success()
-                                ->body('Member renewed successfullyy')
-                                ->send();
+                                    ->title('Renewed Successfully 🎉')
+                                    ->success()
+                                    ->body('Member renewed successfully. Do you want to send a WhatsApp message?')
+                                    ->actions([
+                                        
+                                        Action::make('send_whatsapp')
+                                            ->label('Yes, Send')
+                                            ->icon('heroicon-o-chat-bubble-left-ellipsis')
+                                            ->url(function () use ($record, $data, $newExpiry) {
+                                                // 👇 your WhatsApp sending logic
+                                                $record->total_amount = $data['total_amount'];
+                                                $record->recieved_amount = $data['recieved_amount'];
+                                                $record->balance_amount = $data['balance_amount'];
+                                                $record->plan_expiry = $newExpiry;
+
+                                                $url = app(WaMessageService::class)->getWaMsgLink($record->customer_id, 'payment',$record);
+                                                
+                                                // open WhatsApp link in new tab
+                                                return $url;
+                                            })
+                                            ->openUrlInNewTab(),
+                                    ])
+                                    ->sendToDatabase(Filament::auth()->user());
+
                             } else {
-                                Notification::make('success')
+                                Notification::make('error')
                                 ->danger()
                                 ->body('Something went wrong.. try again..')
                                 ->send();

@@ -20,7 +20,7 @@ class AppServiceProvider extends ServiceProvider
 
     public $singletons = [
         FilamentLoginResponse::class => LoginResponse::class,
-        FilamentLogoutResponse::class => LogoutResponse::class
+        FilamentLogoutResponse::class => LogoutResponse::class,
     ];
     /**
      * Register any application services.

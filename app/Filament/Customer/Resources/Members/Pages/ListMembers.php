@@ -4,18 +4,22 @@ namespace App\Filament\Customer\Resources\Members\Pages;
 
 use App\Filament\Customer\Resources\Members\MemberResource;
 use App\Filament\Customer\Resources\Members\Widgets\MemberOverview;
+use App\Interfaces\PlanRepoInterface;
 use App\Services\MemberService;
 use Filament\Actions\CreateAction;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\ListRecords;
 use App\Models\Plan;
 use App\Models\Payment;
+use App\Services\WaMessageService;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard\Step;
@@ -79,6 +83,53 @@ class ListMembers extends ListRecords
                         'paid_on'       =>  now(),
                         'valid_until'   =>  $data['plan_expiry']
                     ]);
+                    
+                    // register success message
+                    Notification::make()
+                        ->title('New member registered Successfully 🎉')
+                        ->success()
+                        ->body('Member registered successfully. Do you want to send a WhatsApp message?')
+                        ->actions([
+                            // send subscription message
+                            Action::make('send_whatsapp')
+                                ->label('Yes, Send')
+                                ->icon('heroicon-o-chat-bubble-left-ellipsis')
+                                ->url(function () use ($record, $data) {
+                                    // 👇 your WhatsApp sending logic
+                                    // $plan = app(PlanRepoInterface::class)->findById($data['plan_id']);
+                                    $record->total_amount = $data['plan_amount'];
+                                    $record->recieved_amount = $data['recieved_amount'];
+                                    $record->balance_amount = $data['plan_amount'] - $data['recieved_amount'];
+                                    $record->plan_expiry = $data['plan_expiry'];
+
+                                    $url = app(WaMessageService::class)->getWaMsgLink($record->customer_id, 'payment',$record);
+                                    
+                                    // open WhatsApp link in new tab
+                                    return $url;
+                                })
+                                ->openUrlInNewTab(),
+                            ])
+                            ->sendToDatabase(Filament::auth()->user());
+
+                    Notification::make()
+                        ->title('Want to send welcome message to '. $record->name)
+                        ->success()
+                        ->actions([
+                            Action::make('send_whatsapp')
+                                ->label('Yes, Send')
+                                ->icon('heroicon-o-chat-bubble-left-ellipsis')
+                                ->url(function () use ($record, $data) {
+                                    // 👇 your WhatsApp sending logic
+
+                                    $url = app(WaMessageService::class)->getWaMsgLink($record->customer_id, 'welcome',$record);
+                                    
+                                    // open WhatsApp link in new tab
+                                    return $url;
+                                })
+                                ->openUrlInNewTab(),
+                        ])
+                        ->sendToDatabase(Filament::auth()->user());
+                        
                 }
             }),
         ];

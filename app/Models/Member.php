@@ -18,4 +18,9 @@ class Member extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    public function Plan()
+    {
+        return $this->belongsTo(Plan::class);
+    }
 }
